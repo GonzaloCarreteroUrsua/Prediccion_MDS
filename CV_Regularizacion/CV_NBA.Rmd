@@ -1,0 +1,156 @@
+---
+title: "CV_NBA"
+author: "Gonzalo Carretero Ursúa"
+date: "11/9/2020"
+output: html_document
+---
+
+#### Librerías utilizadas
+````{r }
+library(readr)
+library(rsample)
+library(glmnet)
+library(boot)
+library(ggplot2)
+library(dplyr)
+library(janitor)
+library(magrittr)
+library(tidyverse)
+```
+
+
+#### Lectura de los datos y limpieza
+```{r}
+NBA <- read.csv("nba.csv")
+View(NBA)
+attach(NBA)
+colnames(NBA)
+
+NBA %<>% clean_names() %<>% distinct(player,.keep_all = TRUE) %<>% drop_na()
+```
+
+
+
+#### División de los datos
+En este apartado dividimos los datos en dos subgrupos, el primero que sera la parte de entrenamiento que representa un 70% y el segundo para testear el modelo que representa el 30%
+
+
+````{r}
+set.seed(1234)
+ames_split <- initial_split(NBA, prop = 0.7, strata = "salary")
+ames_train <- training(ames_split)
+ames_test <- testing(ames_split)
+
+# Con la funcion model.matrix nos guarda el modelo en forma matricial
+ames_train_x <- model.matrix(salary ~ ., ames_train) [,-1]
+ames_train_y <- log(ames_train$salary)
+
+ames_test_x <- model.matrix(salary ~ ., ames_test) [,-1]
+ames_test_y <- log(ames_test$salary)
+
+# La función dim nos permite comprobar que se han escogido todas las variables y que el número de observaciones son 70%-30%
+dim(ames_train_x)
+dim(ames_test_x)
+```
+
+
+
+#### Modelo Ridge o modelo cresta
+Este modelo se crea con la función glmnet y con Alpha = 0
+```{r}
+ames_ridge <- glmnet(
+  x = ames_train_x,
+  y = ames_train_y,
+  alpha = 0
+)
+# Gráfico
+plot(ames_ridge, xvar = "lambda")
+```
+
+
+
+La función glmnet con el cv lo que realiza es una validación cruzada o 'cross-validation' que, si no lo específicamos, la hará 10 veces.
+```{r}
+ames_ridge_cv <- cv.glmnet(
+  x = ames_train_x,
+  y = ames_train_y,
+  alpha = 0
+)
+plot(ames_ridge_cv, xvar = "lambda")
+```
+
+
+
+##### Calculo mínimo MSE, Lambda y primer error del min.MSE
+```{r}
+# Mínimo MSE (Media de los errores cuadráticos)
+min(ames_ridge_cv$cvm)
+# Lambda para el mínimo MSE
+ames_ridge_cv$lambda.min
+log(ames_ridge_cv$lambda.min)
+# Primer valor (error) de el error medio cuadrático calculado (minimizado)
+ames_ridge_cv$cvm[ames_ridge_cv$lambda == ames_ridge_cv$lambda.1se]
+# Lambda para el primer error (se especifica al final '1se')
+ames_ridge_cv$lambda.1se
+log(ames_ridge_cv$lambda.1se)
+# Visualización gráfica con el 1 error 
+plot(ames_ridge, xvar = 'lambda')
+abline(v = log(ames_ridge_cv$lambda.1se)) # Añadimos el primer error del min MSE.
+```
+
+
+
+#### Modelo Lasso
+A diferencia del modelo Ridge ahora escogemos un alpha igual a 1. Esto permite forzar algunos predictores a cero y con esto mejorar la precisión de predicción de nuestro modelo.
+````{r}
+ames_lasso <- glmnet(
+  x = ames_train_x,
+  y = ames_train_y,
+  alpha = 1, 
+)
+# Visualización gráfica
+plot(ames_ridge, xvar = "lambda")
+```
+
+
+
+Aplicamos cross-validation 10 veces cómo con el modelo Ridge
+```{r}
+ames_lasso_cv <- cv.glmnet(
+  x = ames_train_x,
+  y = ames_train_y,
+  alpha = 1, 
+)
+plot(ames_lasso_cv)
+```
+
+
+
+##### Calculo mínimo MSE, Lambda y primer error del min.MSE
+```{r}
+min(ames_lasso_cv$cvm) # Mínimo MSE
+ames_lasso_cv$lambda.min # Lambda para el minimo MSE
+# Primer error para el mínimo MSE
+ames_lasso_cv$cvm[ames_lasso_cv$lambda == ames_lasso_cv$lambda.1se]
+ames_lasso_cv$lambda.1se #Lambda para el primer error del min MSE
+
+plot(ames_lasso, xvar = "lambda")
+abline(v = log(ames_lasso_cv$lambda.min), lty = "dashed")
+```
+
+
+
+
+#### Conclusión 
+Podemos observar que el error cuadrático medio con el método de regresión Ridge es de 1,64 y en el caso del método Lasso es de 1,08. Por tanto, en principio, será más óptimo utilizar el método de regresion Lasso.
+
+
+
+
+
+
+
+
+
+
+
