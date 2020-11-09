@@ -1,0 +1,82 @@
+---
+title: "GAM"
+author: "Gonzalo Carretero Ursúa"
+date: "11/8/2020"
+output: html_document
+---
+#### Librerías
+```{r }
+library(readr)
+library(tidyverse)
+library(broom)
+library(flextable)
+library(mgcv)
+library(reshape2)
+```
+#### Carga datos de PISA 2006
+```{r }
+datos <- read.csv('pisasci2006.csv')
+View(datos)
+colnames(datos)
+dim(datos)
+head(datos)
+attach(datos)
+```
+Variables clave: Overall, Interest in science, support for scientific inquiry,
+#####income index, health index, education index, HDI
+
+#### Modelo GAM
+```{r}
+# k representa el numero de funciones de paso
+GamModel <- gam(Overall ~ s(Interest, k=3) +
+                  s(Support, k = 3) + 
+                  s(Income, k= 3) + 
+                  s(Health, k=3) +
+                  s(Edu, k = 3) + 
+                  s(HDI, k = 3),
+                            data = datos)
+# Representación gráfica
+plot(GamModel, residuals = TRUE, pch = 1)
+coef(GamModel)
+```
+
+
+#### GAM ampliando K
+```{r}
+GamModel2 <- gam(Overall ~ s(Interest, k=5) +
+                                s(Support, k = 5) + 
+                                s(Income, k= 5) + 
+                                s(Health, k=5) +
+                                s(Edu, k = 5) + 
+                                s(HDI, k = 5),
+                              data = datos)
+plot(GamModel2, residuals = TRUE, pch = 1)
+coef(GamModel2)
+```
+
+
+#### Cambiando el parametro "smoothing"
+```{r}
+GamModel3 <- gam(Overall ~ s(Interest, k=3) +
+                   s(Support, k = 3) + 
+                   s(Income, k= 3) + 
+                   s(Health, k=3) +
+                   s(Edu, k = 3) + 
+                   s(HDI, k = 3),
+                 data = datos, sp = 0.01)
+plot(GamModel3, residuals = TRUE, pch = 1)
+coef(GamModel3)
+```
+
+#### Gráficos con los resultados obtenidos de los 3 modelos GAM creados
+```{r}
+gam.check(GamModel)
+gam.check(GamModel2)
+gam.check(GamModel3)
+```
+
+
+
+
+
+
