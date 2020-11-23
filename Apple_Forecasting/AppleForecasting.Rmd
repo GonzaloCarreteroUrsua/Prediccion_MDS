@@ -1,0 +1,134 @@
+---
+title: "PrediccionApple"
+author: "Gonzalo Carretero Ursúa"
+date: "11/16/2020"
+output:
+  html_document: default
+  word_document: default
+---
+# LibreríasI
+
+```{r}
+library(readr)
+library(forecast)
+library(xts)
+library(ggplot2)
+library(ggfortify)
+```
+
+# Datos
+```{r}
+rawData <- read.csv('IngresosApple.csv', sep = ';')
+rawVentas<-rawData$Ingresos
+rawDate <- seq(as.Date('2008/04/01'), as.Date('2017/07/01'), by = 'quarter')
+
+xVentas=xts(rawVentas,order.by=rawDate)
+# Transformación del data se
+xVentas=to.quarterly(xVentas)
+zVentas = as.zoo(xVentas$xVentas.Close)
+names(zVentas)="Primas"
+View(zVentas)
+```
+
+
+# Visualización gráfica
+```{r}
+autoplot(zVentas)+ggtitle("Primas Trimestrales Mapfre")+xlab("Trimestres")+ylab("Primas")
+```
+
+En el gráfico podemos observar que la serie no es estacionaria ni en media ni en varianza. No es estacionaria en media por que se aprecia una tendencia positiva clara, y, no es estacionaria en varianza por la variabilidad que presenta a lo largo de la serie.
+
+
+# Representación por trimestres
+
+```{r}
+tsVentas=ts(coredata(zVentas), start = c(2008, 2), frequency = 4)
+#Seasonal Plot
+ggfreqplot(tsVentas,freq=4,nrow=1,facet.labeller=c("1T","2T","3T","4T"))+ggtitle("Primas Trimestrales")
+```
+Si observamos por trimestres se muestra cómo el cuarto trimestre presenta una media bastante superior a la media de los otros tres trimestres del año. Con esto se concluye que el cuarto trimestre es en el que Apple consigue el mayor ingreso por ventas.
+
+
+
+# Predicción con el modelo ETS
+
+Se utiliza el modelo ETS para predecir. La columna de la salida 'Point Forecast' es el valor que nos predice R con el modelo empleado.
+
+```{r}
+cOmit=4
+nObs=length(zVentas)
+oVentas <- window(zVentas,start=index(zVentas[1]),end=index(zVentas[nObs-cOmit]))
+etsfit<-ets(oVentas)
+fventas.ets=forecast(etsfit)
+summary(fventas.ets)
+```
+
+
+# Representación gráfica con la predicción
+
+Representación gráfica de la predicción con modelo ETS.
+
+```{r}
+plot(fventas.ets)
+lines(window(zVentas),type="o")
+```
+
+# Predicción con modelo ARIMA
+
+Se aplica logaritmo para evitar la variabilidad en varianza
+```{r}
+zlVentas=log(zVentas)
+df_newl <- data.frame(value = as.vector(zlVentas),
+                     time = time(zlVentas))
+ggplot(df_newl)+geom_point(aes(x=time,y=value))+geom_line(aes(x=time,y=value))+ylab("Ventas")+ggtitle("Ventas Trimestrales LOG Apple")+xlab("Trimestres")
+
+ggtsdisplay(zlVentas)
+```
+
+
+# Diferencias para evitar la tendencia 
+```{r}
+ggtsdisplay(diff(zlVentas))
+ggtsdisplay(diff(zlVentas,4))
+ggtsdisplay(diff(diff(zlVentas,4),1))
+```
+```{r}
+fit1=auto.arima(oVentas,lambda=0)
+summary(fit1)
+```
+
+El modelo estimado es un modelo ARIMA (0,1,1)
+
+# Análisis de residuos
+```{r}
+ggtsdisplay(fit1$residuals)
+Box.test(fit1$residuals,lag=4, fitdf=3, type="Lj")
+Box.test(fit1$residuals,lag=12, fitdf=3, type="Lj")
+
+
+```
+Se rechaza la hipótesis nula del test de Box-Ljung de independencia. Los residuos no se distribuyen cómo ruido blanco.
+
+# Predicción con modelo ARIMA
+
+Cómo los residuos no se distribuyen cómo ruido blanco, es decir, hay existencia de correlación entre ellos, no es un modelo óptimo para predecir.
+
+```{r}
+fventas.arima=forecast(fit1)
+df_new <- data.frame(value = as.vector(zVentas),
+                     time = time(zVentas))
+fventas.arima=forecast(fit1)
+fventas.arima
+ggplot(df_new)+geom_point(aes(x=time,y=value))+geom_line(aes(x=time,y=value))+ geom_forecast(fventas.arima,alpha=0.4)+ggtitle("ARIMA: Predicción Apple")
+```
+
+
+
+
+
+
+
+
+
+
+
