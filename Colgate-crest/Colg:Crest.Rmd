@@ -1,0 +1,222 @@
+---
+title: "Colg/Crest"
+author: "Gonzalo Carretero Ursúa"
+date: "11/22/2020"
+output: html_document
+---
+
+```{r setup, include}
+knitr::opts_chunk$set(include =  TRUE)
+```
+
+
+```{r Librerias}
+library(readxl)
+library(TSA)
+library(ggplot2)
+library(forecast)
+library(zoo)
+library(Hmisc)
+library(dplyr)
+library(magrittr) 
+library(xts) 
+```
+
+# Dataset
+
+```{r Datos}
+data <- data <- read_excel("data.xlsx")
+```
+
+# Limpieza y Representación Gráfica
+
+```{r Data transformation}
+date <- seq(as.Date("1958-01-01"), as.Date("1963-04-15"), by = "week")
+data %<>% select(c(-Year, -Week))
+attach(data)
+Crest <- xts(Crest, order.by = date)
+Colgate <- xts(Colgate, order.by = date)
+Crest.Week <- to.weekly(Crest)
+Colgate.Week <- to.weekly(Colgate)
+Crest = as.zoo(Crest.Week$Crest.Close)
+Colgate = as.zoo(Colgate.Week$Colgate.Close)
+
+autoplot(cbind(Crest, Colgate), facets = F)
+```
+Observando el gráfico vemos en ambas series patrones de tendencia, positiva para Crest y negativa para Colgate, y variabilidad en varianza. Por tanto, se concluye que ninguna de las dos series es estacionaria.
+
+# Transformación logarítmica 
+
+Se aplican logaritmos para transformar las series en series estacionarias en varianza. 
+Aplicamos una diferencia para tratar de ver la serie estacionaria en media
+
+```{r Log}
+Crest.Var <- log(Crest)
+Colgate.Var <- log(Colgate)
+ggtsdisplay(diff(Crest.Var))
+ggtsdisplay(diff(Colgate.Var))
+```
+
+
+# ARIMA CREST
+
+```{r}
+c= 16 # 16 semanas que debemos predecir
+n = length(Crest.Var)
+o_crest <- window(x = Crest.Var, 
+                    start = index(Crest.Var[1]),
+                    end = index(Crest.Var[n - c]))
+
+Crest.Arima <- auto.arima(o_crest)
+summary(Crest.Arima)
+Crest.Forc = forecast(Crest.Arima, h = 16)
+Crest.Forc
+```
+R nos devuelve un modelo ARIMA (0,1,1). Es decir, un modelo con un retardo en la parte de media móvil y una diferencia.
+
+# Representación gráfica de la predicción ARIMA para Crest
+
+```{r}
+autoplot(Crest.Forc, main = "ARIMA de Crest") +
+  xlab("Date") +
+  ylab("Crest")
+```
+
+# ARIMA COLGATE
+
+```{r}
+c = 16
+n = length(Colgate.Var)
+o_colgate <- window(x = Colgate.Var, 
+                      start = index(Colgate.Var[1]),
+                      end = index(Colgate.Var[n - c]))
+Colgate.Arima <- auto.arima(o_colgate)
+summary(Colgate.Arima)
+Colgate.Forc = forecast(Colgate.Arima, h = 16)
+Colgate.Forc
+```
+R nos devuelve un modelo ARIMA (0,1,1) para Colgate
+
+# Representación gráfica de la predicción de Colgate 
+
+```{r}
+autoplot(Colgate.Forc, main = "ARIMA de Colgate") +
+  xlab("Date") +
+  ylab("Crest")
+```
+
+
+# Residuos de los modelos ARIMA
+
+```{r}
+ggtsdisplay(Crest.Arima$residuals)
+ggtsdisplay(Colgate.Arima$residuals)
+```
+Se obsevan retardos en los residuos, tanto para Colgate como para Crest, que muestran cierta correlación. Es decir que no son ruido blanco y, por tanto, no se distribuyen cómo una normal (0,1).
+Con esto se concluye que estos modelos ARIMA no son óptimos para predecir
+
+
+# Outliers 
+
+Aditivos (AO): Afectan a la serie temporal
+
+```{r}
+detectAO(Crest.Arima)
+detectAO(Colgate.Arima)
+```
+
+Nos muestra un outlier para Crest en 136, pero no para colgate.
+
+Innovativos (IO): Afectan al error
+
+```{r}
+detectIO(Crest.Arima)
+detectIO(Colgate.Arima)
+```
+
+En los Outliers que afectan al error encontramos uno en el valor 99 para Crest y para Colgate uno en 102.
+
+# Modelo de Intervención Crest
+
+```{r}
+Crest.Arimax <- arimax(x = Crest.Var,
+                       order = c(0,1,1),
+                       xtransf = data.frame(agosto_60 = 1*(seq(Crest.Var) > 136)),
+                       xre = data.frame(agosto_60 = 1*(seq(Crest.Var) == 136)),
+                       io = c(99),
+                        transfer = list(c(0,0)),
+                        method = "ML")  
+
+                       
+```
+
+# Modelo de Intervención Crest
+
+```{r arimax COLGATE}
+Colgate.Arimax <- arimax(x = Colgate.Var,
+                       order = c(0,1,1),
+                       xtransf = data.frame(agosto_60 = 1*(seq(Colgate.Var) > 136)),
+                       xre = data.frame(agosto_60 = 1*(seq(Colgate.Var) == 136)),
+                       io = c(99),
+                        transfer = list(c(0,0)),
+                        method = "ML")   
+plot(Colgate.Arimax$coef, type = 'h')
+```
+
+# Representación gráfica del modelo para Crest
+
+```{r}
+plot(o_crest, 
+     main = "Predicción  Crest", xlab = "Tiempo", ylab = "Cuota") 
+points(fitted(Crest.Arimax), col = "red")
+```
+
+# Representación gráfica del modelo para Colgate
+
+```{r}
+plot(o_colgate, 
+     main = "Predicción Colgate", xlab = "Tiempo", ylab = "Cuota") # Todo lo relativo a labels...
+  # Predicción del arimax
+points(fitted(Colgate.Arimax), col = "Darkgreen")
+```
+
+# Residuos
+
+```{r}
+ggtsdisplay(Crest.Arimax$residuals)
+ggtsdisplay(Colgate.Arimax$residuals)
+```
+
+
+# Función de transferencia
+
+```{r}
+o_135crest <- window(o_crest, end = 135) 
+o_135colgate <- window(o_colgate, end = 135) 
+diffcrest135 <- diff(o_135crest) 
+diffcolgate135 <- diff(o_135colgate) 
+transfer <-  arimax(diffcrest135,        
+             order = c(0,1,1),           
+             include.mean = TRUE,       
+             xtransf = diffcolgate135,   
+             transfer = list(c(0,0)), 
+             method = 'ML')
+transfer$coef
+```
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
