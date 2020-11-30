@@ -1,0 +1,200 @@
+---
+title: "BMW-VOLKSWAGEN"
+author: "Gonzalo Carretero Ursúa"
+date: "11/28/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(quantmod)
+library(forecast)
+library(fGarch)
+library(vars)
+library(depmixS4)
+library(TTR)
+library(reshape2)
+library(xts)
+library(extrafont)
+
+```
+
+```{r}
+MBMW <- getSymbols('BMW.DE', from= '2014-01-01', to = '2020-10-31', auto.assign = FALSE)
+XBMW <- Ad(MBMW)
+dBMW = dailyReturn(XBMW, type = 'log', leading = FALSE)
+dBMW = na.exclude(dBMW)
+```
+
+# Modelo Autorregresivo de Heterocedasticidad Condicional 
+
+Los modelos GARCH son un tipo de modelo autorregresivos que estudia la volatilidad de las rentabilidades de un activo, en nuestro caso BMW y Volkswagen, a través del estudio de sus varianzas condicionales.
+Estos modelos se emplean para tratar de predecir la volatilidad promedio de un activo.
+
+
+## Volatilidad GARCH
+
+```{r}
+plot.zoo(cbind(XBMW,dBMW,dBMW^2),main=paste('BMW'," y  Rentabilidad"),xlab="años",ylab=c("Precio","rentabilidad","Volatilidad"))
+```
+
+
+## Test de la media 
+
+```{r}
+t.test(dBMW)
+```
+
+
+## ACF y PACF
+
+Función de Autocorrelación y Función Parcial de Autocorrelación.
+
+```{r}
+tsdisplay(dBMW^2)
+```
+
+## Test Ljung-Box
+
+Se realizará el test de Ljung-Box con lag 20
+
+```{r}
+Box.test(dBMW^2, lag = 20, type = 'Lj')
+```
+
+## Test de Multiplicadores de Lagrange de Engle 
+
+```{r}
+archTest <- function(rtn,m=10){
+  # Perform Lagrange Multiplier Test for ARCH effect of a time series
+  # rtn: time series
+  # m: selected AR order
+  # TSAY(2013)
+  y=(rtn-mean(rtn))^2
+  T=length(rtn)
+  atsq=y[(m+1):T]
+  x=matrix(0,(T-m),m)
+  for (i in 1:m){
+    x[,i]=y[(m+1-i):(T-i)]
+  }
+  md=lm(atsq~x)
+  summary(md)
+}
+
+archTest(dBMW,20)
+```
+
+Se rechaza la hipótesis nula de modelo no GARCH. 
+
+## Modelo GARCH
+
+```{r}
+model = garchFit(~1 + garch(1,1), data = dBMW, trace = F)
+summary(model)
+```
+
+
+## Volatilidad modelo GARCH(1,1) de BMW
+
+```{r}
+v1=volatility(model)  
+v1=xts(v1,order.by=index(dBMW)) 
+plot(sqrt(252)*v1, main = 'Volatilididad modelo GARCH de BMW')
+```
+
+## Residuos modelo GARCH(1,1)
+
+```{r}
+residuos = residuals(model, standardize=T) 
+residuos= xts(residuos,order.by = index(dBMW)) 
+tsdisplay(residuos^2) 
+plot(residuos)
+```
+
+## Predicción media con el modelo GARCH(1,1) 
+
+```{r}
+predict(model, n.ahead=  20, plot = TRUE, conf = .9, nx = 100)
+```
+
+
+# Modelo VAR
+
+## Datos 
+
+```{r}
+rm(list=ls())
+MVOLKS <- getSymbols('VOW.DE', from= '2014-01-01', to = '2020-10-31', env = NULL)
+MBMW <- getSymbols('BMW.DE', from= '2014-01-01', to = '2020-10-31', env = NULL)
+VOLKS = monthlyReturn(MVOLKS)
+BMW = monthlyReturn(MBMW)
+```
+
+
+```{r}
+v = cbind(BMW,VOLKS)
+colnames(v) = c("BMW","VOLKS")
+v = na.omit(v)
+```
+
+# Modelo
+```{r}
+VARselect(v)
+```
+```{r}
+model.var=VAR(v)
+summary(model.var)
+
+model.var1=VAR(v,type="none")
+summary(model.var1)
+```
+
+
+# Test de Granger 
+
+```{r}
+#causalidad de granger
+causality(model.var1)
+```
+
+No se observa causalidad. Se acepta la hipótesis nula al 5% de causalidad.
+
+
+## Respuesta impulso 
+
+```{r}
+model.ri= irf(model.var1)
+model.ri
+plot(model.ri)
+```
+
+
+## Predicción
+
+```{r}
+predict(model.var1, n.ahead = 8, ci = 0.95) 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
