@@ -1,0 +1,88 @@
+---
+title: "Práctica6_2"
+author: "Gonzalo Carretero Ursúa"
+date: "12/13/2020"
+output:
+  pdf_document:
+    fig_caption: yes
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(out.width = '60%', out.height='60%', fig.align = "center")
+```
+
+# Introducción
+
+La finalidad que se realiza con este breve informe es conocer la estacionariedad de las series de BMW y de Volkswagen. Además, se quiere saber si la contización de los dos activos está cointegrada.
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(quantmod)
+library(tseries)
+library(car)
+library(urca) 
+library(PairTrading)
+library(tseries)
+```
+
+
+```{r}
+getSymbols('BMW.DE', from='2014-01-01', to='2020-11-20', auto.assign = TRUE)
+getSymbols('VOW.DE', from='2014-01-01', to='2020-11-20', auto.assign = TRUE)
+BMW <- Ad(BMW.DE)
+BMW = na.exclude(BMW.DE)
+VOW <- Ad(VOW.DE)
+VOW = na.exclude(VOW.DE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+BMW <- BMW$BMW.DE.Adjusted
+VOW <- VOW$VOW.DE.Adjusted
+plot.zoo(cbind(BMW,VOW), main = 'Cotizacion')
+```
+
+
+# Estacionariedad de las series
+
+```{r include=FALSE}
+PTrading = cbind(BMW,VOW) 
+colnames(PTrading)=c("BMW","VOW") 
+PTrading = na.omit(PTrading)
+```
+
+```{r echo=FALSE, warning=FALSE}
+adf.test(PTrading$BMW) 
+adf.test(PTrading$VOW)
+```
+
+```{r echo=FALSE, warning=FALSE}
+LBMW <- ur.df(PTrading$BMW,type="none",selectlags="AIC",lags=10)
+summary(LBMW)
+LVOW <- ur.df(PTrading$VOW,type="trend",selectlags="AIC",lags=10)
+summary(LVOW)
+```
+
+En ambos casos comprobamos que no son estacionarias las series. Presentan variabilidad en varianza y tampoco son constantes en media. De todos modos, tras la realización del Test de Dickey-Fuller Aumentado, se corrobora que no son estacionarias.
+
+
+# Representación gráfica y cointegración
+
+```{r}
+params <- EstimateParametersHistorically(PTrading, period = 360)
+signal <- Simple(params$spread, 0.05)
+barplot(signal,col="blue",space = 0, border = "blue",xaxt="n",yaxt="n",xlab="",ylab="")
+par(new=TRUE)
+```
+
+```{r}
+return.pairtrading <- Return(PTrading, lag(signal), lag(params$hedge.ratio))
+plot(100 * cumprod(1 + return.pairtrading))
+```
+
+
+
