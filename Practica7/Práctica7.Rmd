@@ -1,0 +1,82 @@
+---
+title: "Práctica 7"
+author: "Gonzalo Carretero Ursúa"
+date: "12/13/2020"
+output: 
+  pdf_document:
+    fig_caption: yes
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(out.width = '60%', out.height='60%', fig.align = "center")
+```
+\newpage
+
+# Introducción
+
+El objetivo de este trabajo es conocer el impacto que genero el caso 'Diesel Gate' de Volkswagen. 
+El 'Diesel Gate' consistía en una falsificación de los datos de emisiones de óxido de nitrogeno de los motores TDI de la marca Volkswagen. Esto sucedió a finales de 2015. 
+
+
+```{r}
+
+library(tidyr)
+library(ggplot2)
+library(xts)
+library(tseries)
+library(CausalImpact)
+library(quantmod)
+```
+
+
+```{r}
+getSymbols("BMW.DE", from="2014-01-01", to="2020-11-20", auto.assign = TRUE) 
+getSymbols("VOW3.DE", from="2014-01-01", to="2020-11-20", auto.assign = TRUE) 
+BMW <- Ad(BMW.DE)
+BMW = na.exclude(BMW)
+VOW <- Ad(VOW3.DE)
+VOW = na.exclude(VOW)
+```
+
+# Visualización Gráfica BMW y Volkwagen
+
+```{r}
+BMW <- BMW$BMW.DE.Adjusted
+VOW <- VOW$VOW.DE.Adjusted
+plot.zoo(cbind(BMW,VOW), main = 'Cotizacion')
+```
+
+# FECHAS
+
+Se establece cómo punto crítico el 1 de Septiembre de 2015. Esto es por qué fue la fecha en la que se conoció el software que manipulaba los datos de contaminación.
+
+```{r}
+pre_DG <- as.Date(c("2014-01-01", "2015-09-01"))
+post_DG <- as.Date(c("2015-09-02", "2020-12-12"))
+```
+
+# Modelo Causal
+
+```{r}
+UNION <- cbind(BMW, VOW)
+UNION2 <- cbind(VOW, BMW)
+
+
+ModelBMW <- CausalImpact(UNION,
+                             pre.period = pre_DG, 
+                             post.period = post_DG)
+ModelVolks <- CausalImpact(UNION2, 
+                             pre.period = pre_DG, 
+                             post.period = post_DG)
+summary(ModelBMW)
+plot(ModelBMW)
+summary(ModelVolks)
+plot(ModelVolks)
+
+```
+Tras la visualización del modelo podemos observar cómo afecto de forma negativa a la empresa Volkswagen el descubrimiento de su software ilícito.
